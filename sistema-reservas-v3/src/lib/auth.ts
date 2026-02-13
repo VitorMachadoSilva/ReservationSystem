@@ -1,6 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
+import { UserRole } from '@prisma/client';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -10,6 +11,7 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Senha (CPF)', type: 'password' },
       },
+
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Email e senha são obrigatórios');
@@ -18,12 +20,13 @@ export const authOptions: NextAuthOptions = {
         const email = credentials.email.toLowerCase();
         const cpf = credentials.password;
 
-        // Verificar se é login de ADMIN
+        // ==========================
+        // LOGIN ADMIN
+        // ==========================
         if (
           email === process.env.ADMIN_EMAIL &&
           cpf === process.env.ADMIN_PASSWORD
         ) {
-          // Buscar ou criar admin
           let admin = await prisma.user.findUnique({
             where: { email },
           });
@@ -34,7 +37,7 @@ export const authOptions: NextAuthOptions = {
                 email,
                 cpf: 'ADMIN',
                 name: 'Administrador',
-                role: 'ADMIN',
+                role: UserRole.ADMIN,
               },
             });
           }
@@ -44,28 +47,33 @@ export const authOptions: NextAuthOptions = {
             email: admin.email,
             name: admin.name,
             role: admin.role,
+            department: undefined, // 🔥 SEMPRE definir
           };
         }
 
-        // Validar formato de email institucional
+        // ==========================
+        // VALIDAÇÃO EMAIL
+        // ==========================
         const isAluno = email.endsWith('@aluno.fmpsc.edu.br');
-        const isProfessor = email.endsWith('@fmpsc.edu.br') && !isAluno;
+        const isProfessor =
+          email.endsWith('@fmpsc.edu.br') && !isAluno;
 
         if (!isAluno && !isProfessor) {
-          throw new Error('Email deve ser institucional (@aluno.fmpsc.edu.br ou @fmpsc.edu.br)');
+          throw new Error(
+            'Email deve ser institucional (@aluno.fmpsc.edu.br ou @fmpsc.edu.br)'
+          );
         }
 
-        // Buscar usuário no banco
         const user = await prisma.user.findUnique({
           where: { email },
         });
 
         if (!user) {
-          throw new Error('Usuário não encontrado. Entre em contato com a administração.');
+          throw new Error(
+            'Usuário não encontrado. Entre em contato com a administração.'
+          );
         }
 
-        // Verificar CPF (senha)
-        // Remove pontos, traços e espaços do CPF
         const cpfLimpo = cpf.replace(/[.\-\s]/g, '');
         const cpfBancoLimpo = user.cpf.replace(/[.\-\s]/g, '');
 
@@ -73,6 +81,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error('CPF incorreto');
         }
 
+        // 🔥 NORMALIZAÇÃO DEFINITIVA
         return {
           id: user.id,
           email: user.email,
@@ -83,6 +92,7 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -92,22 +102,27 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
-        session.user.department = token.department as string | undefined;
+        session.user.role = token.role as UserRole;
+        session.user.department =
+          (token.department as string | undefined) ?? undefined;
       }
       return session;
     },
   },
+
   pages: {
     signIn: '/login',
     error: '/login',
   },
+
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 dias
+    maxAge: 30 * 24 * 60 * 60,
   },
+
   secret: process.env.NEXTAUTH_SECRET,
 };
