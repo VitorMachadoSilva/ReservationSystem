@@ -11,7 +11,6 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Senha (CPF)', type: 'password' },
       },
-
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Email e senha são obrigatórios');
@@ -47,7 +46,7 @@ export const authOptions: NextAuthOptions = {
             email: admin.email,
             name: admin.name,
             role: admin.role,
-            department: undefined, // 🔥 SEMPRE definir
+            department: admin.department ?? undefined,
           };
         }
 
@@ -55,8 +54,7 @@ export const authOptions: NextAuthOptions = {
         // VALIDAÇÃO EMAIL
         // ==========================
         const isAluno = email.endsWith('@aluno.fmpsc.edu.br');
-        const isProfessor =
-          email.endsWith('@fmpsc.edu.br') && !isAluno;
+        const isProfessor = email.endsWith('@fmpsc.edu.br') && !isAluno;
 
         if (!isAluno && !isProfessor) {
           throw new Error(
@@ -81,7 +79,6 @@ export const authOptions: NextAuthOptions = {
           throw new Error('CPF incorreto');
         }
 
-        // 🔥 NORMALIZAÇÃO DEFINITIVA
         return {
           id: user.id,
           email: user.email,
@@ -92,37 +89,31 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
-        token.department = user.department ?? undefined;
+        token.department = user.department;
       }
       return token;
     },
-
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
-        session.user.department =
-          (token.department as string | undefined) ?? undefined;
+        session.user.department = token.department as string | undefined;
       }
       return session;
     },
   },
-
   pages: {
     signIn: '/login',
     error: '/login',
   },
-
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60,
   },
-
   secret: process.env.NEXTAUTH_SECRET,
 };
